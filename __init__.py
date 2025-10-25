@@ -1,14 +1,14 @@
 """
 RGS-UNet package initialization.
 
-Содержит:
-- Архитектуру модели RGS-UNet
-- Метрики и функции потерь
-- Генераторы данных
-- Утилиты для инференса (обработка изображений и видео)
+Contains:
+- RGS-UNet model architecture
+- Metrics and loss functions
+- Data generators
+- Inference utilities (image and video processing)
 """
 
-# --- Импорты из внутренних модулей ---
+# --- Imports from internal modules ---
 from nn_architecture import build_rgs_unet
 
 from .nn_utils import (
@@ -34,7 +34,7 @@ from .infer import (
     segment_video
 )
 
-# --- Определяем, что экспортировать при from RGS_UNet import * ---
+# --- Define public exports for 'from RGS_UNet import *' ---
 __all__ = [
     "build_rgs_unet",
     "focal_dice_tversky_loss",

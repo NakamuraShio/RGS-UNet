@@ -1,12 +1,14 @@
 RGS-UNet (ResNet18-Ghost Module-SIMAM-UNet)
 ================================
-Модель для скоростной и точной сегментации проводов на edge-устройстве (например линейки Jetson Orin)
+A model for **high-speed and accurate wire segmentation** on **edge devices** (e.g., Jetson Orin series).
 
-Разработана на основе статьи опубликованной 04.06.2025: https://www.mdpi.com/1424-8220/25/11/3551
+Developed based on a [research paper](https://www.mdpi.com/1424-8220/25/11/3551) published on June 4, 2025
 
-Сборка в Google Colab: https://colab.research.google.com/drive/1ZRCXQ8MNQfr3GllVqcs6X81Otx8x-DRW?usp=sharing
+Assembly and training can be done in Google Colab: 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1ZRCXQ8MNQfr3GllVqcs6X81Otx8x-DRW?usp=sharing)
 
-## Примеры разметки
+
+## Annotation Examples
 <p align="center">
   <img src="assets/frame_1.jpg" width="45%">
   <img src="assets/mask_1.jpg" width="45%">
@@ -23,106 +25,108 @@ RGS-UNet (ResNet18-Ghost Module-SIMAM-UNet)
   <img src="assets/frame_4.jpg" width="45%">
   <img src="assets/mask_4.jpg" width="45%">
   <br>
-  <em>Слева — исходное изображение, справа — маска сегментации</em>
+  <em>Left: original image, right: segmentation mask</em>
   <br>
-  <em>Разметка выполнялась для трёх силовых кабелей, без телефонных линий натянутых ниже</em>
+  <em>Annotation was performed for three power cables only, excluding the lower telephone lines.</em>
 </p>
 
-Структура проекта
+Project Structure
 ------------------------------
-- `train.py` / `infer.py` — скрипты обучения и инференса
-- `nn_architecture.py` — архитектура сети
-- `nn_utils.py` — метрики/лоссы и утилиты
-- `data_generator.py` - генератор данных для нейросети
-- `config.py` — конфиг путей и гиперпараметров
-- `requirements.txt` — зависимости
-- `assests/` — папка для примеров работы модели
+- `train.py` / `infer.py` — training and inference scripts
+- `nn_architecture.py` — network architecture
+- `nn_utils.py` — metrics, losses, and utilities
+- `data_generator.py` - data generator for the neural network
+- `config.py` — configuration of paths and hyperparameters
+- `requirements.txt` — dependencies
+- `__init__.py` — package initializer and public API definition
+- `README.md` — project description 
+- `assests/` — sample results and visualizations
 
-**Вход:** RGB 736x1280 (по умолчанию; настраивается через DIMENSIONS в config)  
-**Выход:** 1-канальная карта вероятностей (маска семантической сегментации)
+**Input:** RGB 736×1280 (default; can be adjusted via `DIMENSIONS` in `config.py`)  
+**Output:** Single-channel probability map (semantic segmentation mask)
 
-Доступна опция **mixed precision** для работы в float16 и сохранением хрупких мест в float32 через флаг MIXED_PRECISION в config
+Supports **mixed precision** inference (float16 with critical layers preserved in float32), enabled via the `MIXED_PRECISION` flag in `config.py`.
 
-## Особенности архитектуры:
-- Кастомные слои GhostModule вместо обычной свёртки, модифицированная ResNet18 в качестве backbone и ряд других изменений обеспечивают снижение числа избыточных параметров модели до 57% от исходной UNet архитектуры, что даёт существенный
-пророст производительности.
-- За счёт элементов SIMAM attention и замены активационной функции на Mish обеспечивается прирост точности, превышающий базовую UNet
-- Комплексная функция ошибки, включающая в себя DICE для более плавной сходимости, Focal loss для более точного определения границ проводов, Tversky для борьбы с разрывами масок при распознавании
+## Architecture Highlights:
+- **GhostModule-based layers** replace standard convolutions; a **modified ResNet18 backbone** and several other optimizations reduce redundant parameters to **57% of the baseline UNet**, providing a substantial performance gain.
+- Incorporation of **SIMAM attention** and the **Mish activation function** yields accuracy improvements beyond the standard UNet baseline.
+- A **composite loss function** combining **DICE** (for smoother convergence), **Focal Loss** (for precise wire boundary detection), and **Tversky Loss** (for handling mask discontinuities).
 
 <p align="center">
   <img src="assets/architecture.jpg" width="90%">
   <br>
-  <em>Архитектура сети RGS-UNet</em>
+  <em>RGS-UNet Architecture</em>
 </p>
 
 <p align="center">
   <img src="assets/metrics.jpg" width="90%">
   <br>
-  <em>Сравнительные кривые метрик для конкурирующих моделей: (a) сравнительные кривые для F1-Scores; (b) сравнительные кривые для IoU.</em>
+  <em>Comparative metric curves: (a) F1-Score comparison (b) IoU comparison across competing models</em>
 </p>
 
-Установка проекта и среды
+Environment Setup
 ------------------------------
 ```bash
-# Клонирование репозитория
+# Clone the repository
 git clone https://github.com/NakamuraShio/RGS-UNet.git
 cd RGS-UNet
 
-# Создание виртуального окружения
+# Create a virtual environment
 python -m venv venv
 
-# Активация (выберите вариант для своей ОС)
+# Activate it (choose your OS)
 # Windows:
 venv\Scripts\activate
 # macOS / Linux:
 source venv/bin/activate
 
-# Установка зависимостей
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-Запуск в режиме инференса
+Running Inference
 ------------------------------
-Возможен запуск в трёх режимах обработки:
-- обработка изображения,
-- обработка видео,
-- пакетная обработка папки с изображениями и видео целиком
+Supports three modes of operation:
+- Single image processing
+- Video processing
+- Batch processing for folders containing multiple images or videos
 
-**Доступ через import:**
+**Using Python import:**
 ```python
-# input_path - путь к изображению, видео файлу или папке с файлами
-# save_path - путь, куда сохранять результат обработки (изображение или видео с нанесённой маской)
+# input_path — path to an image, video file, or folder
+# save_path — output path for the processed image/video with the segmentation mask
 
 from infer import run_segmentation
 run_segmentation(input_path, save_path)
 ```
 
-**Доступ через терминал:**
+**Using the command line:**
 ```python
-# Обработка одного изображения
+# Single image
 python -m RGS-UNet.infer --input "./materials/frame.jpg" --output "./results/"
-# Обработка одного видео файла
+# Single video file
 python -m RGS-UNet.infer --input "./materials/video.mp4" --output "./results/"
-# Обработка всех файлов в папке
+# Batch processing of all files in a folder
 python -m RGS-UNet.infer --input "./materials" --output "./results/"
 ```
 
-Обучение модели
+Model Training
 ------------------------------
 ```python
-# Пример запуска через import
+# Example: via import
 from train import train_model
 history = train_model(dataset_path, weights_path)
 
-# Пример запуска через терминал
+# Example: via terminal
 python -m RGS-UNet.train --dataset "./dataset" --weights "./RGS-UNet/weights"
 ```
 
 
-Автор проекта
+Author
 ------------------------------
-**Артём Алмазов**  
+Project by: **Artem Almazov**  
 Computer Vision Developer
 
 Email: aaalmaz@gmail.com  
-[LinkedIn](https://www.linkedin.com/in/artem-almazov/)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Profile-blue?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/artem-almazov/)  
+[![GitHub](https://img.shields.io/badge/GitHub-black?logo=github)](https://github.com/NakamuraShio)

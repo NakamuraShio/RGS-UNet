@@ -23,7 +23,7 @@ class COCOSegmentationGenerator(Sequence):
         return int(np.ceil(len(self.image_ids) / self.batch_size))
 
     def __getitem__(self, index):
-        # Индексы картинок для батча
+        # Indices of images for the current batch
         batch_ids = self.indexes[index*self.batch_size:(index+1)*self.batch_size]
 
         X, Y = self.__data_generation(batch_ids)
@@ -38,11 +38,11 @@ class COCOSegmentationGenerator(Sequence):
         batch_size = len(batch_ids)
 
         if MIXED_PRECISION:
-            # Картинки в float16 для mixed precision
+            # Convert images to float16 for mixed precision
             X = np.zeros((batch_size, DIMENSIONS[0], DIMENSIONS[1], 3), dtype=np.float16)
         else:
             X = np.zeros((batch_size, DIMENSIONS[0], DIMENSIONS[1], 3), dtype=np.float32)
-        # Маски в float32 для корректной работы loss/metrics
+        # Convert masks to float32 for proper loss and metric calculations
         Y = np.zeros((batch_size, DIMENSIONS[0], DIMENSIONS[1], 1), dtype=np.float32)
 
         for i, idx in enumerate(batch_ids):
@@ -50,17 +50,17 @@ class COCOSegmentationGenerator(Sequence):
             img_info = self.coco.loadImgs(img_id)[0]
             img_path = os.path.join(self.images_dir, img_info["file_name"])
 
-            # --- Загружаем изображение ---
+            # --- Load image ---
             image = cv2.imread(img_path)
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             image = cv2.resize(image, (DIMENSIONS[1], DIMENSIONS[0]))
             if MIXED_PRECISION:
-                image = image.astype(np.float32) / 255.0  # нормализация
+                image = image.astype(np.float32) / 255.0  # normalization
                 image = image.astype(np.float16)          # mixed precision
             else:
-                image = image / 255.0  # нормализация
+                image = image / 255.0  # normalization
 
-            # --- Загружаем аннотации ---
+            # --- Load annotations ---
             ann_ids = self.coco.getAnnIds(imgIds=img_id)
             anns = self.coco.loadAnns(ann_ids)
 

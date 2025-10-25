@@ -12,7 +12,7 @@ from tensorflow.keras.models import Model
 class Mish(Layer):
     def call(self, x):
         if MIXED_PRECISION:
-            # Выполняем в float32 для стабильности, затем возвращаем в compute_dtype
+            # Perform computation in float32 for stability, then cast back to compute_dtype
             x = tf.cast(x, tf.float32)
             out = x * tf.math.tanh(tf.math.softplus(x))
             return tf.cast(out, self.compute_dtype)
@@ -29,7 +29,7 @@ class SimAM(Layer):
 
     def call(self, x):
         if MIXED_PRECISION:
-            # Критичные операции в float32
+            # Critical operations are executed in float32
             x32 = tf.cast(x, tf.float32)
             mu = tf.reduce_mean(x32, axis=(1, 2), keepdims=True)
             sigma2 = tf.reduce_mean(tf.square(x32 - mu), axis=(1, 2), keepdims=True)
@@ -172,6 +172,6 @@ def build_rgs_unet(input_shape=(736, 1280, 3), num_classes=1):
     inp = Input(shape=input_shape)
     encoded, skips = build_encoder(inp, base_filters=64)
     decoded = build_decoder(encoded, skips, base_filters=64)
-    # Итоговый выход всегда в float32 для корректной работы loss/metrics
+    # Final output is always kept in float32 to ensure loss/metric consistency
     output = Conv2D(num_classes, 1, activation='sigmoid', dtype='float32')(decoded)
     return Model(inputs=inp, outputs=output, name='RGS_UNet')

@@ -16,7 +16,7 @@ if MIXED_PRECISION:
 # ---------- Helper to find latest checkpoint ----------
 def find_latest_ckpt(path, pattern=r"power_line_seg_epoch_(\d+)\.weights\.h5"):
     tx = []
-    for fn in glob.glob(os.path.join(path, "*.weights.h5")):  # ищем все веса
+    for fn in glob.glob(os.path.join(path, "*.weights.h5")):  # Searching for all available model weights
         m = re.search(pattern, os.path.basename(fn))
         if m:
             tx.append((int(m.group(1)), fn))
@@ -45,16 +45,16 @@ def train_model(dataset_path, save_dir):
     valid_gen = COCOSegmentationGenerator(valid_images, valid_ann, target_class_id=1, batch_size=BATCH_SIZE,
                                           shuffle=False)
 
-    # ---------- Оптимизатор с поддержкой mixed precision ----------
+    # ---------- Optimizer with mixed precision support ----------
     optimizer = tf.keras.optimizers.Adam(learning_rate=OPTIMIZER_STEP)
     if MIXED_PRECISION:
         optimizer = mixed_precision.LossScaleOptimizer(optimizer)
 
-    # ---------- Компиляция модели ----------
+    # ---------- Model compilation ----------
     model = build_rgs_unet(input_shape=DIMENSIONS, num_classes=1)
     model.compile(
         optimizer=optimizer,
-        loss=focal_dice_loss,
+        loss=focal_dice_tversky_loss,
         metrics=[tf.keras.metrics.BinaryAccuracy(name="bin_acc"),
                  f1_score_power_line,
                  MeanAveragePrecisionIoU()])
@@ -68,20 +68,20 @@ def train_model(dataset_path, save_dir):
         print("No checkpoint found; starting from scratch.")
     last_epoch = last_epoch or 0
 
-    # ---------- Добавляем callback для изменения весов loss ----------
+    # ---------- Add callback to save model weights after each epoch ----------
     checkpoint_cb = ModelCheckpoint(
         filepath=os.path.join(save_dir, "power_line_seg_epoch_{epoch:03d}.weights.h5"),
         save_weights_only=True,
         save_freq='epoch'
     )
 
-    # ---------- Добавляем ReduceLROnPlateau ----------
+    # ---------- Add ReduceLROnPlateau ----------
     reduce_lr = ReduceLROnPlateau(
-        monitor='val_loss',  # метрика, которую мы отслеживаем
-        factor=0.5,  # во сколько уменьшить learning rate (0.5 уменьшит вдвое)
-        patience=8,  # сколько эпох ждать без улучшения до снижения LR
+        monitor='val_loss',  # metric to monitor
+        factor=0.5,  # reduce learning rate by half
+        patience=8,  # number of epochs with no improvement before reducing LR
         verbose=1,
-        min_lr=1e-7  # минимальное значение LR, ниже которого опускаться нельзя
+        min_lr=1e-7  # lower bound for learning rate
     )
 
     callbacks = [
@@ -90,7 +90,7 @@ def train_model(dataset_path, save_dir):
         reduce_lr
     ]
 
-    # ---------- Запуск обучения ----------
+    # ---------- Start training ----------
     history = model.fit(
         train_gen,
         validation_data=valid_gen,

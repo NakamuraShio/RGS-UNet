@@ -20,59 +20,59 @@ def load_infer_model(weights_path):
     """Создание модели и загрузка весов"""
     model = build_rgs_unet(input_shape=DIMENSIONS, num_classes=1)
     model.load_weights(weights_path)
-    # # холостой прогон для прогрева
+    # Warm-up run to initialize the model before timing actual inference
     # dummy_input = np.zeros((1, *DIMENSIONS), dtype=np.float32)
     # _ = model.predict(dummy_input, verbose=0)
     return model
 
 
 def segment_frame(model, image_path, save_dir):
-    """Обработка одного изображения"""
+    """Image processing"""
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
     img = cv2.imread(image_path)
     if img is None:
-        raise FileNotFoundError(f"Не удалось загрузить изображение {image_path}")
+        raise FileNotFoundError(f"Failed to load image {image_path}")
 
-    # resize маски под модель
+    # Resize mask to match model input dimensions
     resized = cv2.resize(img, (DIMENSIONS[1], DIMENSIONS[0]))
     input_tensor = resized.astype(np.float32) / 255.0
     input_tensor = np.expand_dims(input_tensor, axis=0)
 
-    # инференс
+    # Inference
     pred = model.predict(input_tensor, verbose=0)[0]
     mask = (pred > 0.5).astype(np.uint8) * 255
 
-    # маска в зелёный
+    # Convert segmentation mask to green overlay
     mask_colored = np.zeros_like(resized)
     mask_colored[:, :, 1] = mask[:, :, 0]
 
-    # resize маски обратно под размер оригинала
+    # Resize mask back to the original image size
     mask_resized = cv2.resize(mask_colored, (img.shape[1], img.shape[0]))
 
-    # наложение
+    # Overlay segmentation mask on the original image
     overlay = cv2.addWeighted(img, 1.0, mask_resized, 0.6, 0)
 
-    # сохранение
+    # Save output
     filename = os.path.basename(image_path)
     filename_processed = os.path.splitext(filename)[0] + "_processed.jpg"
     save_path = os.path.join(save_dir, filename_processed)
     cv2.imwrite(save_path, overlay)
 
-    print(f"[INFO] Сохранено: {save_path}")
+    print(f"[INFO] Segmented image saved: {save_path}")
 
     return pred
 
 
 def segment_video(model, video_path, save_dir, record_video=True):
-    """Обработка видео"""
+    """Video processing"""
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
-        raise FileNotFoundError(f"Не удалось открыть видео {video_path}")
+        raise FileNotFoundError(f"Failed to open video source {video_path}")
 
     fps = cap.get(cv2.CAP_PROP_FPS)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -91,20 +91,20 @@ def segment_video(model, video_path, save_dir, record_video=True):
         if not ret:
             break
 
-        # resize под модель
+        # Resize mask to match model input dimensions
         resized = cv2.resize(frame, (DIMENSIONS[1], DIMENSIONS[0]))
         input_tensor = resized.astype(np.float32) / 255.0
         input_tensor = np.expand_dims(input_tensor, axis=0)
 
-        # предсказание
+        # Inference
         pred = model.predict(input_tensor, verbose=0)[0]
         mask = (pred > 0.5).astype(np.uint8) * 255
 
-        # маска в зелёный
+        # Convert segmentation mask to green overlay
         mask_colored = np.zeros_like(resized)
         mask_colored[:, :, 1] = mask[:, :, 0]
 
-        # наложение
+        # Overlay segmentation mask on the original image
         overlay = cv2.addWeighted(resized, 1.0, mask_colored, 0.6, 0)
 
         if record_video:
@@ -120,9 +120,9 @@ def segment_video(model, video_path, save_dir, record_video=True):
 
     elapsed = time.time() - start_time
     fps_total = processed_frames / elapsed
-    print(f"[INFO] Обработка завершена: {timedelta(seconds=int(elapsed))}, FPS={fps_total:.2f}")
+    print(f"[INFO] Processing complete: {timedelta(seconds=int(elapsed))}, FPS={fps_total:.2f}")
     if record_video:
-        print(f"[INFO] Видео сохранено: {output_path}")
+        print(f"[INFO] Video saved successfully: {output_path}")
 
 
 def process_path(model, input_path, output_dir):
@@ -140,7 +140,7 @@ def process_path(model, input_path, output_dir):
 
 
 def run_segmentation(input_path, save_path):
-    # mixed precision включаем только если есть совместимая GPU
+    # Enable mixed precision only if a compatible GPU is available
     if MIXED_PRECISION:
         if tf.config.list_physical_devices('GPU'):
             mixed_precision.set_global_policy('mixed_float16')
@@ -150,11 +150,11 @@ def run_segmentation(input_path, save_path):
     model = load_infer_model(WEIGHTS_PATH)
 
     if os.path.isdir(input_path):
-        # пакетная обработка
+        # Batch processing
         for fname in os.listdir(input_path):
             process_path(model, os.path.join(input_path, fname), save_path)
     else:
-        # одиночный файл
+        # Single file processing
         process_path(model, input_path, save_path)
 
 
