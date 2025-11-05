@@ -5,7 +5,7 @@ A model for **high-speed and accurate wire segmentation** on **edge devices** (e
 Developed based on a [research paper](https://www.mdpi.com/1424-8220/25/11/3551) published on June 4, 2025
 
 Assembly and training can be done in Google Colab: 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1ZRCXQ8MNQfr3GllVqcs6X81Otx8x-DRW?usp=sharing)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1_37t5hxmjYZHaqc0pdh4y5CIC9WNjk90?usp=sharing)
 
 
 ## Annotation Examples
