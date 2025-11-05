@@ -39,7 +39,8 @@ Project Structure
 - `config.py` — configuration of paths and hyperparameters
 - `requirements.txt` — dependencies
 - `__init__.py` — package initializer and public API definition
-- `README.md` — project description 
+- `README.md` — project description
+- `LICENSE` — MIT License file with code usage permission
 - `assests/` — sample results and visualizations
 
 **Input:** RGB 736×1280 (default; can be adjusted via `DIMENSIONS` in `config.py`)  
@@ -93,11 +94,26 @@ Supports three modes of operation:
 
 **Using Python import:**
 ```python
-# input_path — path to an image, video file, or folder
-# save_path — output path for the processed image/video with the segmentation mask
+# Initialize model once to avoid reloading between runs
+from infer import load_infer_model
+from config import WEIGHTS_PATH
+model = load_infer_model(WEIGHTS_PATH, warmup=True)
+# warmup     — optional parameter: if True, runs a warm-up pass to initialize the model
 
+# Process image
+from infer import segment_frame
+prediction = segment_frame(model, image, filename=filename, save_dir=save_dir)
+# image      — preloaded image compatible with OpenCV (cv2) for further processing
+# filename   — optional file name. If specified, the image with the overlaid segmentation mask 
+#              will be saved to the directory defined by save_dir.
+# save_dir   — optional output directory path. Required if filename is provided
+# prediction — segmentation output: probability map with values between 0 and 1
+
+# Batch processing 
 from infer import run_segmentation
-run_segmentation(input_path, save_path)
+run_segmentation(model, input_path, save_path)
+# input_path — path to an image, video file, or folder
+# save_path  — output path for the processed image/video with the segmentation mask
 ```
 
 **Using the command line:**

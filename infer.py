@@ -16,24 +16,31 @@ IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
 VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv"}
 
 
-def load_infer_model(weights_path):
-    """Создание модели и загрузка весов"""
+def load_infer_model(weights_path, warmup=False):
+    """Model creation and weight loading"""
+    # Enable mixed precision only if a compatible GPU is available
+    if MIXED_PRECISION:
+        if tf.config.list_physical_devices('GPU'):
+            mixed_precision.set_global_policy('mixed_float16')
+        else:
+            mixed_precision.set_global_policy('float32')
+
     model = build_rgs_unet(input_shape=DIMENSIONS, num_classes=1)
     model.load_weights(weights_path)
     # Warm-up run to initialize the model before timing actual inference
-    # dummy_input = np.zeros((1, *DIMENSIONS), dtype=np.float32)
-    # _ = model.predict(dummy_input, verbose=0)
+    if warmup:
+        dummy_input = np.zeros((1, *DIMENSIONS), dtype=np.float32)
+        _ = model.predict(dummy_input, verbose=0)
     return model
 
 
-def segment_frame(model, image_path, save_dir):
+def segment_frame(model, img, filename=None, save_dir=None):
     """Image processing"""
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
-
-    img = cv2.imread(image_path)
-    if img is None:
-        raise FileNotFoundError(f"Failed to load image {image_path}")
+    if filename:
+        if save_dir is None:
+            save_dir = os.getcwd()
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
 
     # Resize mask to match model input dimensions
     resized = cv2.resize(img, (DIMENSIONS[1], DIMENSIONS[0]))
@@ -43,32 +50,30 @@ def segment_frame(model, image_path, save_dir):
     # Inference
     pred = model.predict(input_tensor, verbose=0)[0]
     mask = (pred > 0.5).astype(np.uint8) * 255
+    mask_resized = cv2.resize(mask, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_NEAREST)
 
-    # Convert segmentation mask to green overlay
-    mask_colored = np.zeros_like(resized)
-    mask_colored[:, :, 1] = mask[:, :, 0]
-
-    # Resize mask back to the original image size
-    mask_resized = cv2.resize(mask_colored, (img.shape[1], img.shape[0]))
-
-    # Overlay segmentation mask on the original image
-    overlay = cv2.addWeighted(img, 1.0, mask_resized, 0.6, 0)
+    # Convert segmentation mask to purple overlay
+    overlay = img.copy()
+    overlay[:, :, 1] = np.where(mask_resized > 0, 120, overlay[:, :, 1])
 
     # Save output
-    filename = os.path.basename(image_path)
-    filename_processed = os.path.splitext(filename)[0] + "_processed.jpg"
-    save_path = os.path.join(save_dir, filename_processed)
-    cv2.imwrite(save_path, overlay)
+    if filename:
+        filename_processed = os.path.splitext(filename)[0] + "_processed.jpg"
+        save_path = os.path.join(save_dir, filename_processed)
+        cv2.imwrite(save_path, overlay)
 
-    print(f"[INFO] Segmented image saved: {save_path}")
+        print(f"[INFO] Segmented image saved: {save_path}")
 
     return pred
 
 
-def segment_video(model, video_path, save_dir, record_video=True):
+def segment_video(model, video_path, save_dir=None, record_video=True):
     """Video processing"""
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
+    if record_video:
+        if save_dir is None:
+            save_dir = os.getcwd()
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
 
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
@@ -77,9 +82,10 @@ def segment_video(model, video_path, save_dir, record_video=True):
     fps = cap.get(cv2.CAP_PROP_FPS)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     video_name = os.path.splitext(os.path.basename(video_path))[0]
-    output_path = os.path.join(save_dir, video_name + "_processed.mp4")
 
     if record_video:
+        output_path = os.path.join(save_dir, video_name + "_processed.mp4")
+
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         out = cv2.VideoWriter(output_path, fourcc, fps, (DIMENSIONS[1], DIMENSIONS[0]))
 
@@ -99,13 +105,11 @@ def segment_video(model, video_path, save_dir, record_video=True):
         # Inference
         pred = model.predict(input_tensor, verbose=0)[0]
         mask = (pred > 0.5).astype(np.uint8) * 255
+        mask_resized = cv2.resize(mask, (frame.shape[1], frame.shape[0]), interpolation=cv2.INTER_NEAREST)
 
-        # Convert segmentation mask to green overlay
-        mask_colored = np.zeros_like(resized)
-        mask_colored[:, :, 1] = mask[:, :, 0]
-
-        # Overlay segmentation mask on the original image
-        overlay = cv2.addWeighted(resized, 1.0, mask_colored, 0.6, 0)
+        # Convert segmentation mask to purple overlay
+        overlay = frame.copy()
+        overlay[:, :, 1] = np.where(mask_resized > 0, 120, overlay[:, :, 1])
 
         if record_video:
             out.write(cv2.convertScaleAbs(overlay))
@@ -132,23 +136,18 @@ def process_path(model, input_path, output_dir):
     ext = os.path.splitext(input_path)[1].lower()
 
     if ext in IMAGE_EXTENSIONS:
-        segment_frame(model, input_path, output_dir)
+        img = cv2.imread(input_path)
+        if img is None:
+            raise FileNotFoundError(f"Failed to load image {input_path}")
+        filename = os.path.basename(input_path)
+        segment_frame(model, img, filename, output_dir)
     elif ext in VIDEO_EXTENSIONS:
         segment_video(model, input_path, output_dir)
     else:
         raise ValueError(f"Unsupported file format: {ext}")
 
 
-def run_segmentation(input_path, save_path):
-    # Enable mixed precision only if a compatible GPU is available
-    if MIXED_PRECISION:
-        if tf.config.list_physical_devices('GPU'):
-            mixed_precision.set_global_policy('mixed_float16')
-        else:
-            mixed_precision.set_global_policy('float32')
-
-    model = load_infer_model(WEIGHTS_PATH)
-
+def run_segmentation(model, input_path, save_path=os.getcwd()):
     if os.path.isdir(input_path):
         # Batch processing
         for fname in os.listdir(input_path):
@@ -164,7 +163,8 @@ def main():
     parser.add_argument("--output", type=str, required=True, help="Output directory")
     args = parser.parse_args()
 
-    run_segmentation(args.input, args.output)
+    model = load_infer_model(WEIGHTS_PATH, warmup=False)
+    run_segmentation(model, args.input, args.output)
 
 
 if __name__ == "__main__":
